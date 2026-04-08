@@ -412,3 +412,57 @@ export interface FillBlankImportRecord {
   createdAt: Date;
   updatedAt: Date;
 }
+
+// ==================== 中文拼写相关 ====================
+
+// 中文拼写词汇项
+export interface ChineseSpellingItem {
+  id: string;
+  english: string;           // 英文单词/词组
+  chinese: string;           // 中文释义
+  category?: string;         // 分类
+  tags?: string[];          // 标签
+  difficulty?: 'easy' | 'medium' | 'hard';
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// 带收藏日期的收藏项
+export interface FavoriteItem extends ChineseSpellingItem {
+  favoriteDate: string;      // 收藏日期，格式：YYYY-MM-DD
+}
+
+// 中文拼写游戏状态
+export interface ChineseSpellingGameState {
+  currentItem: ChineseSpellingItem | null;
+  currentAnswer: string;
+  isAnswered: boolean;
+  isCorrect: boolean;
+  showHint: boolean;
+  hintLevel: number;        // 提示等级：0=无提示，1=首字，2=拼音，3=完整答案
+  score: number;
+  streak: number;
+  totalAttempts: number;
+  correctAttempts: number;
+  startTime: Date;
+  // 挑战模式相关
+  mode: 'practice' | 'challenge';
+  health?: number;           // 血量（挑战模式）
+  maxHealth?: number;        // 最大血量
+}
+
+// 中文拼写会话结果
+export interface ChineseSpellingSessionResult {
+  sessionId: string;
+  totalItems: number;
+  correctAnswers: number;
+  accuracy: number;
+  totalTime: number;
+  averageTimePerItem: number;
+  mode: 'practice' | 'challenge';
+  category?: string;
+  completedAt: Date;
+  // 挑战模式额外信息
+  finalHealth?: number;
+  maxHealth?: number;
+}

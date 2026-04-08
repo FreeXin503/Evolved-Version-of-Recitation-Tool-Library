@@ -248,6 +248,32 @@ export default function HomePage() {
             </div>
           </Link>
 
+          {/* 中文拼写练习 */}
+          <Link
+            to="/chinese-spelling"
+            className="group bg-white rounded-2xl p-6 shadow-lg hover:shadow-2xl transform hover:scale-105 transition-all duration-300 border border-gray-100"
+          >
+            <div className="flex items-center mb-4">
+              <div className="p-3 rounded-xl bg-gradient-to-r from-orange-500 to-amber-600 text-white shadow-lg group-hover:scale-110 transition-transform duration-200">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </div>
+              <h2 className="ml-4 text-lg font-bold text-gray-800">
+                中文拼写
+              </h2>
+            </div>
+            <p className="text-gray-600 group-hover:text-gray-700 transition-colors">
+              看英文拼写中文，Alt键提示，空格跳转
+            </p>
+            <div className="mt-4 flex items-center text-orange-600 text-sm font-medium">
+              <span>2种模式</span>
+              <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </div>
+          </Link>
+
           </div>
 
         {/* 最近学习内容 */}

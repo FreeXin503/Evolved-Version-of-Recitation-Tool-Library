@@ -37,6 +37,7 @@ const ReviewPage = lazy(() => import('../pages/ReviewPage'));
 const SynoMasterPage = lazy(() => import('../pages/SynoMasterPage'));
 const SynoFavoritesPage = lazy(() => import('../pages/SynoFavoritesPage'));
 const SynoWrongBookPage = lazy(() => import('../pages/SynoWrongBookPage'));
+const ChineseSpellingPage = lazy(() => import('../pages/ChineseSpellingPage'));
 
 // 路由配置
 export const router = createBrowserRouter([
@@ -131,6 +132,10 @@ export const router = createBrowserRouter([
   {
     path: '/syno-wrongbook',
     element: <Suspense fallback={<LoadingFallback />}><SynoWrongBookPage /></Suspense>,
+  },
+  {
+    path: '/chinese-spelling',
+    element: <Suspense fallback={<LoadingFallback />}><ChineseSpellingPage /></Suspense>,
   },
   {
     path: '*',
