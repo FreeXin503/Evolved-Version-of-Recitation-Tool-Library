@@ -8,34 +8,25 @@ import { Link } from 'react-router-dom';
 import { AppLayout } from '../components/layout';
 import { useToast } from '../components/ui';
 import type { ChineseSpellingItem, ChineseSpellingGameState, FavoriteItem } from '../types';
-import { 
-  initializeChineseSpellingGame, 
-  parseChineseSpellingText, 
+import {
+  initializeChineseSpellingGame,
+  parseChineseSpellingText,
   checkChineseSpellingAnswer,
   nextChineseSpellingItem,
   generateChineseSpellingHint,
   generateChineseSpellingSessionResult
 } from '../services/learning/chineseSpelling';
 
-const CHINESE_SPELLING_DATA_KEY = 'chinese_spelling_data';
-const CHINESE_SPELLING_FAVORITES_KEY = 'chinese_spelling_favorites';
-
 export default function ChineseSpellingPage() {
   const toast = useToast();
-  
+
   // 数据管理
-  const [items, setItems] = useState<ChineseSpellingItem[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem(CHINESE_SPELLING_DATA_KEY) || '[]');
-    } catch {
-      return [];
-    }
-  });
-  
+  const [items, setItems] = useState<ChineseSpellingItem[]>([]);
+
   // 导入相关
   const [importText, setImportText] = useState('');
   const [showImport, setShowImport] = useState(false);
-  
+
   // 游戏状态
   const [gameState, setGameState] = useState<ChineseSpellingGameState | null>(null);
   const [remainingItems, setRemainingItems] = useState<ChineseSpellingItem[]>([]);
@@ -47,42 +38,96 @@ export default function ChineseSpellingPage() {
   const [maxHealth, setMaxHealth] = useState(5);
   const [sessionResult, setSessionResult] = useState<any>(null);
   const [shuffleMode, setShuffleMode] = useState<'shuffle' | 'sequential'>('shuffle');
-  const [favorites, setFavorites] = useState<FavoriteItem[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem(CHINESE_SPELLING_FAVORITES_KEY) || '[]');
-    } catch {
-      return [];
-    }
-  });
+  const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
   const [showReviewMode, setShowReviewMode] = useState(false);
 
   // 输入框引用，用于自动聚焦
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // 保存数据到localStorage
+  // 从后端API加载数据
   useEffect(() => {
-    localStorage.setItem(CHINESE_SPELLING_DATA_KEY, JSON.stringify(items));
-  }, [items]);
-
-  // 保存收藏夹到localStorage
-  useEffect(() => {
-    localStorage.setItem(CHINESE_SPELLING_FAVORITES_KEY, JSON.stringify(favorites));
-  }, [favorites]);
+    const loadData = async () => {
+      try {
+        const [itemsRes, favoritesRes] = await Promise.all([
+          fetch('http://localhost:3001/api/items'),
+          fetch('http://localhost:3001/api/favorites')
+        ]);
+        const itemsData = await itemsRes.json();
+        const favoritesData = await favoritesRes.json();
+        
+        setItems(itemsData.map((item: any) => ({
+          id: item.id,
+          english: item.english,
+          chinese: item.chinese,
+          category: item.category || undefined,
+          tags: item.tags ? JSON.parse(item.tags) : undefined,
+          difficulty: item.difficulty,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt
+        })));
+        
+        setFavorites(favoritesData.map((fav: any) => ({
+          id: fav.item.id,
+          english: fav.item.english,
+          chinese: fav.item.chinese,
+          category: fav.item.category || undefined,
+          tags: fav.item.tags ? JSON.parse(fav.item.tags) : undefined,
+          difficulty: fav.item.difficulty,
+          createdAt: fav.item.createdAt,
+          updatedAt: fav.item.updatedAt,
+          favoriteDate: fav.favoriteDate
+        })));
+      } catch (error) {
+        console.error('Failed to load data:', error);
+      }
+    };
+    loadData();
+  }, []);
 
   // 导入数据
-  const handleImport = () => {
+  const handleImport = async () => {
     try {
       const parsedItems = parseChineseSpellingText(importText);
       if (parsedItems.length === 0) {
         toast.error('未找到有效的数据，请检查格式');
         return;
       }
-      
-      setItems([...items, ...parsedItems]);
+
+      const createRes = await fetch('http://localhost:3001/api/items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: parsedItems })
+      });
+
+      if (!createRes.ok) {
+        const errorData = await createRes.json();
+        throw new Error(errorData.error || '导入失败');
+      }
+
+      const itemsRes = await fetch('http://localhost:3001/api/items');
+      const itemsData = await itemsRes.json();
+
+      if (!Array.isArray(itemsData)) {
+        console.error('API返回的不是数组:', itemsData);
+        throw new Error('服务器返回数据格式错误');
+      }
+
+      setItems(itemsData.map((item: any) => ({
+        id: item.id,
+        english: item.english,
+        chinese: item.chinese,
+        category: item.category || undefined,
+        tags: item.tags ? JSON.parse(item.tags) : undefined,
+        difficulty: item.difficulty,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt
+      })));
+
       setImportText('');
       setShowImport(false);
       toast.success(`成功导入 ${parsedItems.length} 个词汇`);
     } catch (error) {
+      console.error('导入错误:', error);
       toast.error('导入失败，请检查格式：' + (error as Error).message);
     }
   };
@@ -220,51 +265,94 @@ export default function ChineseSpellingPage() {
   }, [gameState, showHint, showResult, sessionResult, nextQuestion, checkAnswer]);
 
   // 删除词汇
-  const deleteItem = (id: string) => {
+  const deleteItem = async (id: string) => {
     if (!confirm('确定删除这个词汇吗？')) return;
-    setItems(items.filter(item => item.id !== id));
+    await fetch(`http://localhost:3001/api/items/${id}`, { method: 'DELETE' });
+    const itemsRes = await fetch('http://localhost:3001/api/items');
+    const itemsData = await itemsRes.json();
+    setItems(itemsData.map((item: any) => ({
+      id: item.id,
+      english: item.english,
+      chinese: item.chinese,
+      category: item.category || undefined,
+      tags: item.tags ? JSON.parse(item.tags) : undefined,
+      difficulty: item.difficulty,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt
+    })));
   };
 
   // 清空所有数据
-  const clearAllData = () => {
+  const clearAllData = async () => {
     if (!confirm('确定清空所有数据吗？')) return;
+    await fetch('http://localhost:3001/api/items', { method: 'DELETE' });
     setItems([]);
     toast.success('数据已清空');
   };
 
   // 切换收藏状态
-  const toggleFavorite = (item: ChineseSpellingItem) => {
+  const toggleFavorite = async (item: ChineseSpellingItem) => {
     const exists = favorites.some(fav => fav.id === item.id);
     if (exists) {
-      setFavorites(favorites.filter(fav => fav.id !== item.id));
-      toast.success('已取消收藏');
+      await fetch(`http://localhost:3001/api/favorites/${item.id}`, { method: 'DELETE' });
     } else {
       const today = new Date().toISOString().split('T')[0];
-      const favoriteItem: FavoriteItem = { 
-        ...item, 
-        favoriteDate: today 
-      };
-      setFavorites([...favorites, favoriteItem]);
-      toast.success('已添加到收藏夹');
+      await fetch('http://localhost:3001/api/favorites', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemId: item.id, favoriteDate: today })
+      });
     }
+
+    const favoritesRes = await fetch('http://localhost:3001/api/favorites');
+    const favoritesData = await favoritesRes.json();
+    setFavorites(favoritesData.map((fav: any) => ({
+      id: fav.item.id,
+      english: fav.item.english,
+      chinese: fav.item.chinese,
+      category: fav.item.category || undefined,
+      tags: fav.item.tags ? JSON.parse(fav.item.tags) : undefined,
+      difficulty: fav.item.difficulty,
+      createdAt: fav.item.createdAt,
+      updatedAt: fav.item.updatedAt,
+      favoriteDate: fav.favoriteDate
+    })));
+
+    toast.success(exists ? '已取消收藏' : '已添加到收藏夹');
   };
 
   // 从收藏夹删除
-  const deleteFavorite = (id: string) => {
-    setFavorites(favorites.filter(fav => fav.id !== id));
+  const deleteFavorite = async (id: string) => {
+    await fetch(`http://localhost:3001/api/favorites/${id}`, { method: 'DELETE' });
+    const favoritesRes = await fetch('http://localhost:3001/api/favorites');
+    const favoritesData = await favoritesRes.json();
+    setFavorites(favoritesData.map((fav: any) => ({
+      id: fav.item.id,
+      english: fav.item.english,
+      chinese: fav.item.chinese,
+      category: fav.item.category || undefined,
+      tags: fav.item.tags ? JSON.parse(fav.item.tags) : undefined,
+      difficulty: fav.item.difficulty,
+      createdAt: fav.item.createdAt,
+      updatedAt: fav.item.updatedAt,
+      favoriteDate: fav.favoriteDate
+    })));
     toast.success('已从收藏夹移除');
   };
 
   // 清空收藏夹
-  const clearFavorites = () => {
+  const clearFavorites = async () => {
     if (!confirm('确定清空收藏夹吗？')) return;
+    await fetch('http://localhost:3001/api/favorites', { method: 'DELETE' });
     setFavorites([]);
     toast.success('收藏夹已清空');
   };
 
   // 开始复习
-  const startReview = (date: string) => {
-    const itemsToReview = favorites.filter(fav => fav.favoriteDate === date);
+  const startReview = async (date: string) => {
+    const res = await fetch(`http://localhost:3001/api/favorites/${date}`);
+    const itemsToReview = await res.json();
+    
     if (itemsToReview.length === 0) {
       toast.error('该日期没有收藏的单词');
       return;
