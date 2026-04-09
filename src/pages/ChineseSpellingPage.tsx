@@ -34,12 +34,22 @@ export default function ChineseSpellingPage() {
   const [showHint, setShowHint] = useState(false);
   const [hintLevel, setHintLevel] = useState(0);
   const [showResult, setShowResult] = useState(false);
+  const [historyStack, setHistoryStack] = useState<{ gameState: ChineseSpellingGameState; remainingItems: ChineseSpellingItem[] }[]>([]); // 保存gameState和remainingItems的组合
   const [mode, setMode] = useState<'practice' | 'challenge'>('practice');
   const [maxHealth, setMaxHealth] = useState(5);
   const [sessionResult, setSessionResult] = useState<any>(null);
-  const [shuffleMode, setShuffleMode] = useState<'shuffle' | 'sequential'>('shuffle');
+  const [shuffleMode, setShuffleMode] = useState<'shuffle' | 'sequential'>('sequential');
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
   const [showReviewMode, setShowReviewMode] = useState(false);
+  const [savedProgress, setSavedProgress] = useState<any>(null);
+  const [showContinueDialog, setShowContinueDialog] = useState(false);
+  const [showStartOptionsDialog, setShowStartOptionsDialog] = useState(false);
+  const [showSelectWordDialog, setShowSelectWordDialog] = useState(false);
+  const [reviewDate, setReviewDate] = useState<string>('');
+  const [reviewItems, setReviewItems] = useState<ChineseSpellingItem[]>([]);
+  const [showReviewStartOptionsDialog, setShowReviewStartOptionsDialog] = useState(false);
+  const [showReviewSelectWordDialog, setShowReviewSelectWordDialog] = useState(false);
+  const [pendingMode, setPendingMode] = useState<'practice' | 'challenge' | null>(null);
 
   // 输入框引用，用于自动聚焦
   const inputRef = useRef<HTMLInputElement>(null);
@@ -133,18 +143,34 @@ export default function ChineseSpellingPage() {
   };
 
   // 开始练习
-  const startPractice = (practiceMode: 'practice' | 'challenge' = 'practice') => {
+  const startPractice = async (practiceMode: 'practice' | 'challenge' = 'practice') => {
     if (items.length === 0) {
       toast.error('请先导入词汇数据');
       return;
     }
-    
+
+    // 检查是否有保存的进度
+    try {
+      const progressRes = await fetch(`http://localhost:3001/api/progress/${practiceMode}`);
+      const progressData = await progressRes.json();
+      setSavedProgress(progressData);
+    } catch (error) {
+      console.error('Failed to check progress:', error);
+      setSavedProgress(null);
+    }
+
+    setPendingMode(practiceMode);
+    setShowStartOptionsDialog(true);
+  };
+
+  // 开始新会话
+  const startNewSession = (practiceMode: 'practice' | 'challenge') => {
     setMode(practiceMode);
     const itemsToUse = shuffleMode === 'shuffle'
       ? [...items].sort(() => Math.random() - 0.5)
       : [...items];
     setRemainingItems(itemsToUse);
-    
+
     const newGameState = initializeChineseSpellingGame(itemsToUse, practiceMode, maxHealth);
     setGameState(newGameState);
     setUserAnswer('');
@@ -152,6 +178,67 @@ export default function ChineseSpellingPage() {
     setHintLevel(0);
     setShowResult(false);
     setSessionResult(null);
+    setShowContinueDialog(false);
+    setShowStartOptionsDialog(false);
+    setSavedProgress(null);
+    setPendingMode(null);
+  };
+
+  // 从指定单词开始练习
+  const startFromWord = (startIndex: number) => {
+    if (!pendingMode) return;
+
+    setMode(pendingMode);
+    const itemsToUse = shuffleMode === 'shuffle'
+      ? [...items].sort(() => Math.random() - 0.5)
+      : [...items];
+
+    // 从指定索引开始
+    const slicedItems = itemsToUse.slice(startIndex);
+    setRemainingItems(slicedItems);
+
+    const newGameState = initializeChineseSpellingGame(slicedItems, pendingMode, maxHealth);
+    setGameState(newGameState);
+    setUserAnswer('');
+    setShowHint(false);
+    setHintLevel(0);
+    setShowResult(false);
+    setSessionResult(null);
+    setShowSelectWordDialog(false);
+    setShowStartOptionsDialog(false);
+    setSavedProgress(null);
+    setPendingMode(null);
+  };
+
+  // 继续练习
+  const continueSession = async () => {
+    if (!savedProgress || !pendingMode) return;
+
+    const itemsToUse = shuffleMode === 'shuffle'
+      ? [...items].sort(() => Math.random() - 0.5)
+      : [...items];
+
+    const startIndex = savedProgress.currentIndex;
+    const remainingItems = itemsToUse.slice(startIndex);
+
+    if (remainingItems.length === 0) {
+      toast.info('您已经完成了所有词汇的练习');
+      startNewSession(pendingMode);
+      return;
+    }
+
+    setRemainingItems(remainingItems);
+    const newGameState = initializeChineseSpellingGame(remainingItems, pendingMode, maxHealth);
+    setGameState(newGameState);
+    setUserAnswer('');
+    setShowHint(false);
+    setHintLevel(0);
+    setShowResult(false);
+    setSessionResult(null);
+    setShowContinueDialog(false);
+    setShowStartOptionsDialog(false);
+    setSavedProgress(null);
+    setPendingMode(null);
   };
 
   // 检查答案
@@ -185,12 +272,45 @@ export default function ChineseSpellingPage() {
     }, 0);
   }, [gameState]);
 
+  // 返回上一个
+  const goBack = useCallback(() => {
+    if (historyStack.length === 0) return;
+
+    const previousEntry = historyStack[historyStack.length - 1];
+
+    if (!previousEntry || !previousEntry.gameState || !previousEntry.gameState.currentItem) return;
+
+    // 恢复上一次的gameState和remainingItems，但重置gameState为未答题状态
+    const resetState = {
+      ...previousEntry.gameState,
+      isAnswered: false,
+      isCorrect: false,
+      currentAnswer: ''
+    };
+    setGameState(resetState);
+    setRemainingItems(previousEntry.remainingItems);
+    setHistoryStack(prev => prev.slice(0, -1));
+    setUserAnswer('');
+    setShowResult(false);
+    setShowHint(false);
+    setHintLevel(0);
+
+    // 聚焦到输入框
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 0);
+  }, [historyStack]);
+
   // 下一题
-  const nextQuestion = useCallback(() => {
+  const nextQuestion = useCallback(async () => {
     if (!gameState) return;
-    
+
+    // 先保存当前gameState和remainingItems到历史栈
+    setHistoryStack(prev => [...prev, { gameState, remainingItems }]);
+
+    // 然后进入下一题
     const result = nextChineseSpellingItem(gameState, remainingItems);
-    
+
     if (result.isCompleted) {
       // 会话结束
       const sessionResultData = generateChineseSpellingSessionResult(
@@ -200,20 +320,56 @@ export default function ChineseSpellingPage() {
       );
       setSessionResult(sessionResultData);
       setGameState(null);
+      setRemainingItems([]);
+      setHistoryStack([]);
+
+      // 清空进度
+      await fetch(`http://localhost:3001/api/progress/${mode}`, { method: 'DELETE' });
     } else {
       setGameState(result.gameState);
       setRemainingItems(result.remainingItems);
       setUserAnswer('');
+      setShowResult(false);
       setShowHint(false);
       setHintLevel(0);
-      setShowResult(false);
+
+      // 保存进度
+      const progressIndex = items.length - result.remainingItems.length;
+      const completedCount = gameState.correctAttempts;
+
+      try {
+        await fetch('http://localhost:3001/api/progress', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mode,
+            currentIndex: progressIndex,
+            totalItems: items.length,
+            completedCount
+          })
+        });
+      } catch (error) {
+        console.error('Failed to save progress:', error);
+      }
+
+      // 聚焦到输入框
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 0);
     }
-  }, [gameState, remainingItems, items.length]);
+  }, [gameState, remainingItems, items, mode]);
 
   // 键盘事件处理
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!gameState || sessionResult) return;
+
+      // 左方向键：返回上一个
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        goBack();
+        return;
+      }
 
       // Alt键提示
       if (e.altKey && !showHint && !showResult) {
@@ -262,7 +418,7 @@ export default function ChineseSpellingPage() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [gameState, showHint, showResult, sessionResult, nextQuestion, checkAnswer]);
+  }, [gameState, showHint, showResult, sessionResult, nextQuestion, checkAnswer, goBack]);
 
   // 删除词汇
   const deleteItem = async (id: string) => {
@@ -351,19 +507,41 @@ export default function ChineseSpellingPage() {
   // 开始复习
   const startReview = async (date: string) => {
     const res = await fetch(`http://localhost:3001/api/favorites/${date}`);
-    const itemsToReview = await res.json();
-    
-    if (itemsToReview.length === 0) {
+    const favorites = await res.json();
+
+    if (favorites.length === 0) {
       toast.error('该日期没有收藏的单词');
       return;
     }
 
+    // 提取item信息
+    const itemsToReview = favorites.map((fav: any) => ({
+      id: fav.item.id,
+      english: fav.item.english,
+      chinese: fav.item.chinese,
+      category: fav.item.category || undefined,
+      tags: fav.item.tags ? JSON.parse(fav.item.tags) : undefined,
+      difficulty: fav.item.difficulty,
+      createdAt: fav.item.createdAt,
+      updatedAt: fav.item.updatedAt
+    }));
+
+    setReviewDate(date);
+    setReviewItems(itemsToReview);
+    setShowReviewMode(false);
+    setShowReviewStartOptionsDialog(true);
+  };
+
+  // 收藏复习：重新开始
+  const startReviewNewSession = () => {
+    if (!reviewItems.length) return;
+
     const itemsToUse = shuffleMode === 'shuffle'
-      ? [...itemsToReview].sort(() => Math.random() - 0.5)
-      : [...itemsToReview];
+      ? [...reviewItems].sort(() => Math.random() - 0.5)
+      : [...reviewItems];
 
     setMode('practice');
-    setRemainingItems(itemsToReview);
+    setRemainingItems(itemsToUse);
     const newGameState = initializeChineseSpellingGame(itemsToUse, 'practice', 5);
     setGameState(newGameState);
     setUserAnswer('');
@@ -371,7 +549,34 @@ export default function ChineseSpellingPage() {
     setHintLevel(0);
     setShowResult(false);
     setSessionResult(null);
-    setShowReviewMode(false);
+    setShowReviewStartOptionsDialog(false);
+    setReviewDate('');
+    setReviewItems([]);
+  };
+
+  // 收藏复习：从指定单词开始
+  const startReviewFromWord = (startIndex: number) => {
+    if (!reviewItems.length) return;
+
+    const itemsToUse = shuffleMode === 'shuffle'
+      ? [...reviewItems].sort(() => Math.random() - 0.5)
+      : [...reviewItems];
+
+    const slicedItems = itemsToUse.slice(startIndex);
+
+    setMode('practice');
+    setRemainingItems(slicedItems);
+    const newGameState = initializeChineseSpellingGame(slicedItems, 'practice', 5);
+    setGameState(newGameState);
+    setUserAnswer('');
+    setShowHint(false);
+    setHintLevel(0);
+    setShowResult(false);
+    setSessionResult(null);
+    setShowReviewSelectWordDialog(false);
+    setShowReviewStartOptionsDialog(false);
+    setReviewDate('');
+    setReviewItems([]);
   };
 
   // 渲染导入界面
@@ -476,7 +681,7 @@ export default function ChineseSpellingPage() {
     return (
       <div className="min-h-screen bg-[rgb(198,238,206)] flex flex-col items-center pt-0 pb-8 px-4">
         <div className="w-full max-w-4xl">
-          <div className="mb-4 text-center">
+          <div className="mb-4 text-center flex justify-center gap-4">
             <button
               onClick={() => setGameState(null)}
               className="inline-flex items-center text-gray-600 hover:text-gray-800 text-sm"
@@ -486,34 +691,17 @@ export default function ChineseSpellingPage() {
               </svg>
               返回
             </button>
-            
-            {/* 状态栏 - 隐藏
-            <div className="flex justify-between items-center mb-4">
-              <div className="text-sm text-gray-600">
-                进度: {items.length - remainingItems.length}/{items.length}
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="text-sm text-gray-600">
-                  得分: <span className="font-bold text-green-600">{gameState.score}</span>
-                </div>
-                {mode === 'challenge' && (
-                  <div className="flex items-center">
-                    <span className="text-sm text-gray-600 mr-2">血量:</span>
-                    <div className="flex space-x-1">
-                      {[...Array(maxHealth)].map((_, i) => (
-                        <div
-                          key={i}
-                          className={`w-4 h-4 rounded-full ${
-                            i < (gameState.health || 0) ? 'bg-rose-500' : 'bg-gray-300'
-                          }`}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-            */}
+            {historyStack.length > 0 && (
+              <button
+                onClick={goBack}
+                className="inline-flex items-center text-emerald-600 hover:text-emerald-800 text-sm"
+              >
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+                上一个 (←)
+              </button>
+            )}
           </div>
 
           <div className="bg-white/90 backdrop-blur rounded-3xl p-14 shadow-2xl border border-emerald-100 relative">
@@ -558,7 +746,16 @@ export default function ChineseSpellingPage() {
                 onChange={e => setUserAnswer(e.target.value)}
                 disabled={showResult}
                 ref={inputRef}
-                onKeyPress={e => e.key === 'Enter' && !showResult && checkAnswer()}
+                onKeyDown={e => {
+                  // 左方向键：返回上一个
+                  if (e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    goBack();
+                  } else if (e.key === 'Enter' && !showResult) {
+                    e.preventDefault();
+                    checkAnswer();
+                  }
+                }}
                 className="w-full px-8 py-6 text-3xl text-white border-2 border-emerald-400 rounded-2xl focus:ring-4 focus:ring-emerald-300 focus:border-emerald-400 bg-slate-800 shadow-lg transition-all placeholder:text-slate-400"
                 placeholder="输入中文答案..."
                 autoFocus
@@ -668,6 +865,85 @@ export default function ChineseSpellingPage() {
           <h1 className="text-4xl font-bold text-emerald-800 mb-2">中文拼写练习</h1>
           <p className="text-emerald-600 text-lg">看英文拼写中文，支持 Alt 键提示</p>
         </div>
+
+        {/* 开始选项对话框 */}
+        {showStartOptionsDialog && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl p-8 shadow-2xl max-w-md w-full mx-4">
+              <h3 className="text-2xl font-bold text-gray-900 mb-4">选择开始方式</h3>
+              <div className="space-y-3">
+                <button
+                  onClick={() => {
+                    if (pendingMode) startNewSession(pendingMode);
+                  }}
+                  className="w-full bg-emerald-600 text-white py-3 px-6 rounded-xl hover:bg-emerald-700 transition-colors font-medium"
+                >
+                  重新开始
+                </button>
+                {savedProgress && savedProgress.currentIndex > 0 && savedProgress.currentIndex < items.length && (
+                  <button
+                    onClick={continueSession}
+                    className="w-full bg-blue-600 text-white py-3 px-6 rounded-xl hover:bg-blue-700 transition-colors font-medium"
+                  >
+                    继续上次进度（第 {savedProgress.currentIndex + 1} 个词汇）
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setShowStartOptionsDialog(false);
+                    setShowSelectWordDialog(true);
+                  }}
+                  className="w-full bg-purple-600 text-white py-3 px-6 rounded-xl hover:bg-purple-700 transition-colors font-medium"
+                >
+                  选择从哪个单词开始
+                </button>
+                <button
+                  onClick={() => {
+                    setShowStartOptionsDialog(false);
+                    setSavedProgress(null);
+                    setPendingMode(null);
+                  }}
+                  className="w-full bg-gray-200 text-gray-800 py-3 px-6 rounded-xl hover:bg-gray-300 transition-colors font-medium"
+                >
+                  取消
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 选择单词对话框 */}
+        {showSelectWordDialog && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl p-8 shadow-2xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col">
+              <h3 className="text-2xl font-bold text-gray-900 mb-4">选择从哪个单词开始</h3>
+              <div className="flex-1 overflow-y-auto mb-4">
+                <div className="grid grid-cols-2 gap-2">
+                  {items.map((item, index) => (
+                    <button
+                      key={item.id}
+                      onClick={() => startFromWord(index)}
+                      className="p-3 bg-gray-100 hover:bg-emerald-100 rounded-lg text-left transition-colors"
+                    >
+                      <div className="text-sm text-gray-600">#{index + 1}</div>
+                      <div className="font-medium text-gray-900">{item.english}</div>
+                      <div className="text-sm text-gray-600">{item.chinese}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowSelectWordDialog(false);
+                  setShowStartOptionsDialog(true);
+                }}
+                className="w-full bg-gray-200 text-gray-800 py-3 px-6 rounded-xl hover:bg-gray-300 transition-colors font-medium"
+              >
+                返回
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* 统计信息 */}
         <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-200 mb-6">
@@ -932,9 +1208,9 @@ export default function ChineseSpellingPage() {
                     acc[date].push(item);
                     return acc;
                   }, {} as Record<string, FavoriteItem[]>);
-                  
+
                   const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
-                  
+
                   return sortedDates.map(date => (
                     <button
                       key={date}
@@ -959,6 +1235,78 @@ export default function ChineseSpellingPage() {
                 className="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
               >
                 取消
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 收藏复习开始选项对话框 */}
+        {showReviewStartOptionsDialog && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl p-8 shadow-2xl max-w-md w-full mx-4">
+              <h3 className="text-2xl font-bold text-gray-900 mb-4">选择复习开始方式</h3>
+              <p className="text-gray-600 mb-4">
+                {reviewDate} 的收藏（{reviewItems.length} 个单词）
+              </p>
+              <div className="space-y-3">
+                <button
+                  onClick={startReviewNewSession}
+                  className="w-full bg-emerald-600 text-white py-3 px-6 rounded-xl hover:bg-emerald-700 transition-colors font-medium"
+                >
+                  重新开始
+                </button>
+                <button
+                  onClick={() => {
+                    setShowReviewStartOptionsDialog(false);
+                    setShowReviewSelectWordDialog(true);
+                  }}
+                  className="w-full bg-purple-600 text-white py-3 px-6 rounded-xl hover:bg-purple-700 transition-colors font-medium"
+                >
+                  选择从哪个单词开始
+                </button>
+                <button
+                  onClick={() => {
+                    setShowReviewStartOptionsDialog(false);
+                    setReviewDate('');
+                    setReviewItems([]);
+                  }}
+                  className="w-full bg-gray-200 text-gray-800 py-3 px-6 rounded-xl hover:bg-gray-300 transition-colors font-medium"
+                >
+                  取消
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 收藏复习选择单词对话框 */}
+        {showReviewSelectWordDialog && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl p-8 shadow-2xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col">
+              <h3 className="text-2xl font-bold text-gray-900 mb-4">选择从哪个单词开始复习</h3>
+              <div className="flex-1 overflow-y-auto mb-4">
+                <div className="grid grid-cols-2 gap-2">
+                  {reviewItems.map((item, index) => (
+                    <button
+                      key={item.id}
+                      onClick={() => startReviewFromWord(index)}
+                      className="p-3 bg-gray-100 hover:bg-emerald-100 rounded-lg text-left transition-colors"
+                    >
+                      <div className="text-sm text-gray-600">#{index + 1}</div>
+                      <div className="font-medium text-gray-900">{item.english}</div>
+                      <div className="text-sm text-gray-600">{item.chinese}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowReviewSelectWordDialog(false);
+                  setShowReviewStartOptionsDialog(true);
+                }}
+                className="w-full bg-gray-200 text-gray-800 py-3 px-6 rounded-xl hover:bg-gray-300 transition-colors font-medium"
+              >
+                返回
               </button>
             </div>
           </div>

@@ -21,7 +21,7 @@ app.get('/api/items', async (req, res) => {
   try {
     console.log('GET /api/items - Fetching items...');
     const items = await prisma.chineseSpellingItem.findMany({
-      orderBy: { createdAt: 'desc' }
+      orderBy: { sequence: 'asc' }
     });
     console.log('GET /api/items - Success, found', items.length, 'items');
     res.json(items);
@@ -38,13 +38,21 @@ app.post('/api/items', async (req, res) => {
     const { items } = req.body;
     console.log('POST /api/items - Items count:', items.length);
 
+    // 获取当前最大的sequence值
+    const maxSequenceItem = await prisma.chineseSpellingItem.findFirst({
+      orderBy: { sequence: 'desc' },
+      select: { sequence: true }
+    });
+    const startSequence = (maxSequenceItem?.sequence || 0) + 1;
+
     const result = await prisma.chineseSpellingItem.createMany({
-      data: items.map(item => ({
+      data: items.map((item, index) => ({
         english: item.english,
         chinese: item.chinese,
         category: item.category,
         tags: item.tags ? JSON.stringify(item.tags) : null,
-        difficulty: item.difficulty
+        difficulty: item.difficulty,
+        sequence: startSequence + index
       }))
     });
 
@@ -135,6 +143,56 @@ app.get('/api/favorites/:date', async (req, res) => {
       orderBy: { createdAt: 'desc' }
     });
     res.json(favorites);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 获取练习进度
+app.get('/api/progress/:mode', async (req, res) => {
+  try {
+    const progress = await prisma.chineseSpellingProgress.findUnique({
+      where: { mode: req.params.mode }
+    });
+    res.json(progress);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 保存练习进度
+app.post('/api/progress', async (req, res) => {
+  try {
+    const { mode, currentIndex, totalItems, completedCount } = req.body;
+    const progress = await prisma.chineseSpellingProgress.upsert({
+      where: { mode },
+      update: {
+        currentIndex,
+        totalItems,
+        completedCount,
+        lastPracticedAt: new Date()
+      },
+      create: {
+        mode,
+        currentIndex,
+        totalItems,
+        completedCount,
+        lastPracticedAt: new Date()
+      }
+    });
+    res.json(progress);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 重置练习进度
+app.delete('/api/progress/:mode', async (req, res) => {
+  try {
+    await prisma.chineseSpellingProgress.delete({
+      where: { mode: req.params.mode }
+    });
+    res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

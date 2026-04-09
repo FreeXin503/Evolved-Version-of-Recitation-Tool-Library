@@ -18,6 +18,7 @@ model ChineseSpellingItem {
   category    String?
   tags        String?  // JSON string array
   difficulty  String?  // 'easy' | 'medium' | 'hard'
+  sequence    Int      @default(0)  // 导入顺序
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   favorites   ChineseSpellingFavorite[]
@@ -32,4 +33,18 @@ model ChineseSpellingFavorite {
   item           ChineseSpellingItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
   @@unique([itemId, favoriteDate])
+}
+
+// 中文拼写练习进度表
+model ChineseSpellingProgress {
+  id               String   @id @default(uuid())
+  mode             String   // 'practice' | 'challenge'
+  currentIndex     Int      // 当前练习到的索引
+  totalItems       Int      // 总词汇数
+  completedCount   Int      // 已完成数量
+  lastPracticedAt  DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([mode])
 }
