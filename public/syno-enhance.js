@@ -3,7 +3,7 @@
   if(!window.location.pathname.includes('synomaster'))return;
   var st=document.createElement('style');
   st.id='syno-enhance-style';
-  st.textContent='.grid.gap-3 button{font-size:1.35rem!important;padding:1.25rem 1.75rem!important;min-height:5rem!important;line-height:1.6!important;position:relative!important;font-weight:700!important}.grid.gap-3 button[data-m]::after{content:attr(data-m);display:block;font-size:1rem!important;color:#9ca3af;font-weight:400;margin-top:4px;line-height:1.3;pointer-events:none;opacity:0;transition:opacity .15s ease}body.syno-alt .grid.gap-3 button[data-m]::after{opacity:1!important}';
+  st.textContent='.grid.gap-3 button{font-size:1.35rem!important;padding:1.25rem 1.75rem!important;min-height:5rem!important;line-height:1.6!important;position:relative!important;font-weight:700!important}.grid.gap-3 button[data-m]::after{content:attr(data-m);display:block;font-size:1rem!important;color:#9ca3af;font-weight:400;margin-top:4px;line-height:1.3;pointer-events:none;opacity:0;transition:opacity .15s ease}body.syno-alt .grid.gap-3 button[data-m]::after{opacity:1!important;color:#dc2626!important;font-weight:700!important}';
   document.head.appendChild(st);
   var mm={};
   function rebuildMm(){
