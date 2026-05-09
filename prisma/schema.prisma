@@ -48,3 +48,17 @@ model ChineseSpellingProgress {
 
   @@unique([mode])
 }
+
+// SynoMaster练习进度表
+model SynomasterProgress {
+  id               String   @id @default(uuid())
+  mode             String   // 'practice' | 'challenge'
+  currentIndex     Int      // 当前练习到的索引
+  totalItems       Int      // 总词组数
+  completedCount   Int      // 已完成数量
+  lastPracticedAt  DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([mode])
+}

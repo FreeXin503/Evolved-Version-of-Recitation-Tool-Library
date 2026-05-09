@@ -198,6 +198,56 @@ app.delete('/api/progress/:mode', async (req, res) => {
   }
 });
 
+// 获取SynoMaster练习进度
+app.get('/api/synomaster/progress/:mode', async (req, res) => {
+  try {
+    const progress = await prisma.synomasterProgress.findUnique({
+      where: { mode: req.params.mode }
+    });
+    res.json(progress);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 保存SynoMaster练习进度
+app.post('/api/synomaster/progress', async (req, res) => {
+  try {
+    const { mode, currentIndex, totalItems, completedCount } = req.body;
+    const progress = await prisma.synomasterProgress.upsert({
+      where: { mode },
+      update: {
+        currentIndex,
+        totalItems,
+        completedCount,
+        lastPracticedAt: new Date()
+      },
+      create: {
+        mode,
+        currentIndex,
+        totalItems,
+        completedCount,
+        lastPracticedAt: new Date()
+      }
+    });
+    res.json(progress);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 重置SynoMaster练习进度
+app.delete('/api/synomaster/progress/:mode', async (req, res) => {
+  try {
+    await prisma.synomasterProgress.delete({
+      where: { mode: req.params.mode }
+    });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
