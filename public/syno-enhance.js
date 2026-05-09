@@ -4,7 +4,7 @@
   
   var st=document.createElement('style');
   st.id='syno-enhance-style';
-  st.textContent='.grid.gap-3 button{font-size:1.75rem!important;padding:1.5rem 2rem!important;min-height:6rem!important;line-height:1.6!important;position:relative!important;font-weight:700!important}.grid.gap-3 button[data-m]::after{content:attr(data-m);display:block;font-size:1.25rem!important;color:#9ca3af;font-weight:400;margin-top:6px;line-height:1.3;pointer-events:none;opacity:0;transition:opacity .15s ease}body.syno-alt .grid.gap-3 button[data-m]::after{opacity:1!important;color:#dc2626!important;font-weight:700!important}';
+  st.textContent='.grid.gap-3 button{font-size:1.75rem!important;padding:1.5rem 2rem!important;min-height:6rem!important;line-height:1.6!important;position:relative!important;font-weight:700!important}.grid.gap-3 button[data-m]::after{content:attr(data-m);display:block;font-size:1.25rem!important;color:#9ca3af;font-weight:400;margin-top:6px;line-height:1.3;pointer-events:none;opacity:0;transition:opacity .15s ease}body.syno-alt .grid.gap-3 button[data-m]::after{opacity:1!important;color:#dc2626!important;font-weight:700!important}.syno-error-meaning{display:block;font-size:1.25rem;color:#dc2626;font-weight:700;margin-top:6px;line-height:1.3;opacity:0;animation:synoFadeIn 0.3s ease forwards}@keyframes synoFadeIn{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}';
   document.head.appendChild(st);
   
   var mm={};
@@ -80,13 +80,15 @@
           var m=mm[w];
           
           if(!cs[w]&&m){
-            b.textContent=origText+'\n'+m;
-            b.style.color='#dc2626';
-            b.style.fontSize='1.25rem';
+            var meaningSpan=document.createElement('span');
+            meaningSpan.className='syno-error-meaning';
+            meaningSpan.textContent=m;
+            b.appendChild(meaningSpan);
+            
             setTimeout(function(){
-              b.textContent=origText;
-              b.style.color='';
-              b.style.fontSize='';
+              if(meaningSpan.parentNode===b){
+                b.removeChild(meaningSpan);
+              }
             },1000);
           }
         });
